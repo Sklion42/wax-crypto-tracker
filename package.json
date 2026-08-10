@@ -1,0 +1,27 @@
+{
+  "name": "wax-crypto-tracker-bot",
+  "version": "1.0.0",
+  "description": "Standalone Discord bot that tracks WAX blockchain token prices in voice channel names.",
+  "main": "index.js",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "register": "node scripts/register-commands.js"
+  },
+  "keywords": [
+    "discord",
+    "discord-bot",
+    "wax",
+    "crypto",
+    "price-tracker",
+    "alcor"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "discord.js": "^14.14.1",
+    "dotenv": "^17.4.2"
+  }
+}
