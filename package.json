@@ -1,6 +1,6 @@
 {
   "name": "wax-crypto-tracker-bot",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Standalone Discord bot that tracks WAX blockchain token prices in voice channel names.",
   "main": "index.js",
   "type": "commonjs",
@@ -9,7 +9,8 @@
   },
   "scripts": {
     "start": "node index.js",
-    "register": "node scripts/register-commands.js"
+    "register": "node scripts/register-commands.js",
+    "test": "node --test"
   },
   "keywords": [
     "discord",

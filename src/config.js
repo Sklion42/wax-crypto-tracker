@@ -56,7 +56,10 @@ const config = {
         endpoints:  parseList(process.env.WAX_RPC_ENDPOINTS, DEFAULT_ENDPOINTS),
         timeoutMs:  parseNumber(process.env.WAX_RPC_TIMEOUT_MS, 15000),
         tokenContract: 'eosio.token',
-        swapContract:  process.env.WAX_SWAP_CONTRACT || 'swap.alcor',
+        // Alcor runs two separate markets: the AMM (pool type) and the order
+        // book (standard type).
+        swapContract:      process.env.WAX_SWAP_CONTRACT || 'swap.alcor',
+        orderbookContract: process.env.WAX_ORDERBOOK_CONTRACT || 'alcordexmain',
     },
     coingecko: {
         apiKey: process.env.COINGECKO_API_KEY || null,

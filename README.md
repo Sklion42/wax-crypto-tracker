@@ -4,13 +4,15 @@ A small, self-contained Discord bot that shows **live WAX blockchain token price
 
 ```
 🔊 ↗️ WAX: $0.0412
-🔊 ↘️ TLM: $0.0089 | 0.2160 WAX
+🔊 ↘️ TLM: $0.0089 | 0.216 WAX
+🔊 ↗️ DEF: $0.0346 | 5.77108807 WAX
+🔊 ➡️ DEF: 22.5372 TLM
 🔊 ➡️ WAXUSDC: 24.2718 WAX
 ```
 
 Channels are display-only (nobody can join them), refresh themselves on a timer, and show a trend arrow (↗️ / ↘️ / ➡️) comparing the price to the previous refresh.
 
-Prices come from **CoinGecko** for WAX/USD and from the **Alcor AMM pools** read directly on the WAX chain for every other token — no API key and no account required.
+Prices come from **CoinGecko** for WAX/USD and, for every other token, from **Alcor** read directly on the WAX chain — either its order book or one of its AMM pools. No API key and no account required.
 
 ---
 
@@ -73,33 +75,64 @@ the **Manage Channels** permission by default (changeable in
 
 | Command | What it does |
 |---|---|
-| `/crypto-tracker add token:<SYMBOL> [type] [contract] [category]` | Creates a voice channel tracking that token |
-| `/crypto-tracker remove token:<SYMBOL> [contract]` | Stops tracking and deletes the channel |
+| `/crypto-tracker add token:<SYMBOL> [type] [contract] [quote] [quote_contract] [pool_id] [category]` | Creates a voice channel tracking that token |
+| `/crypto-tracker remove [token] [contract] [pool_id]` | Stops tracking and deletes the channel — with no option, pick from a menu |
 | `/crypto-tracker list` | Lists the tokens tracked on this server |
 | `/crypto-tracker refresh` | Forces an immediate refresh of every channel |
 
 ### Token types
 
-| Type | Display | Needs a contract? | Use it for |
-|---|---|---|---|
-| `standard` *(default)* | `$0.0089 \| 0.2160 WAX` | yes | any token with an Alcor TOKEN/WAX pool |
-| `pool` | `$0.0089 \| 0.2160 WAX` | yes | same maths, separate label for AMM/LP tokens |
-| `stablecoin` | `24.2718 WAX` | no | tokens pegged to $1 (WAXUSDC…) — priced as `1 / WAX` |
-| `native` | `$0.0412` | no | WAX itself, priced in USD from CoinGecko |
+| Type | Price source | Display | Needs a contract? | Use it for |
+|---|---|---|---|---|
+| `standard` *(default)* | Alcor **order book** (`alcordexmain`) | `$0.0089 \| 0.216 WAX` | yes | tokens traded on the Alcor order book |
+| `pool` | one Alcor **AMM pool** (`swap.alcor`) | `$0.0346 \| 5.77 WAX` or `22.5372 TLM` | yes | tokens traded on the Alcor swap |
+| `stablecoin` | `1 / WAX` | `24.2718 WAX` | no | tokens pegged to $1 (WAXUSDC…) |
+| `native` | CoinGecko | `$0.0412` | no | WAX itself |
+
+Alcor runs **two separate markets**, and a token can be liquid on one and
+nearly empty on the other — reading the wrong one gives a believable but wrong
+price. Check on [wax.alcor.exchange](https://wax.alcor.exchange) where the token
+actually trades and pick `standard` (order book) or `pool` (swap) accordingly.
+
+- **Order book** price = middle of the best bid and best ask (or the only side
+  that exists).
+- **AMM pool** price = the pool's current price (`sqrtPriceX64`), the same figure
+  Alcor shows. Reserve ratios are *not* used: on a concentrated-liquidity pool
+  they can be wildly off.
+
+### Choosing an AMM pool
+
+A token often has several pools (DEF/WAX, DEF/TLM, several fee tiers…). With
+`type:pool`:
+
+- `quote` picks the pair — `WAX` by default, e.g. `quote:TLM` for DEF/TLM.
+  A pool not quoted in WAX shows its raw price (`22.5372 TLM`), without a $
+  conversion.
+- `quote_contract` breaks a tie between two quote tokens with the same symbol.
+- `pool_id` targets one precise pool. When several pools match, the bot lists
+  them (id, price, fee, reserves) and asks you to run the command again with
+  `pool_id`.
+
+The chosen pool is **pinned**: refreshes never slide to another pool, even if it
+becomes deeper. The same token can be tracked on several pools at once.
 
 ### Examples
 
 ```
 /crypto-tracker add token:WAX type:native
 /crypto-tracker add token:TLM type:standard contract:alien.worlds
-/crypto-tracker add token:DEF type:standard contract:defensetoken
+/crypto-tracker add token:DEF type:pool contract:defensetoken
+/crypto-tracker add token:DEF type:pool contract:defensetoken quote:TLM
 /crypto-tracker add token:WAXUSDC type:stablecoin
+/crypto-tracker remove token:DEF pool_id:22
+/crypto-tracker remove
 ```
 
 The contract is the WAX account that issues the token. Find it on
 [wax.alcor.exchange](https://wax.alcor.exchange) — it is shown next to the
-symbol on the pair's page. If `add` answers "token not found", the symbol or
-the contract is wrong, or that token has no TOKEN/WAX pool on Alcor.
+symbol on the pair's page. If `add` finds no price, the symbol or the contract
+is wrong, or the token is not traded on the market matching the chosen type —
+try the other one (`standard` ↔ `pool`).
 
 ---
 
@@ -116,6 +149,8 @@ Everything is set through `.env`:
 | `UPDATE_INTERVAL_MINUTES` | `10` | Refresh period. Values under 5 are clamped |
 | `COINGECKO_API_KEY` | *(empty)* | Optional demo key, avoids public rate limits |
 | `WAX_RPC_ENDPOINTS` | 5 public nodes | Comma-separated RPC list, tried in order with failover |
+| `WAX_SWAP_CONTRACT` | `swap.alcor` | AMM contract read by the `pool` type |
+| `WAX_ORDERBOOK_CONTRACT` | `alcordexmain` | Order book contract read by the `standard` type |
 | `DATA_FILE` | `./data/tracked-channels.json` | Where tracked channels are persisted |
 
 ### Why 10 minutes and not 1?
@@ -149,7 +184,9 @@ to be distributed.
 | Commands do not appear | Global registration takes up to 1h. Set `DISCORD_GUILD_ID` for instant registration, or re-invite the bot with the `applications.commands` scope |
 | "Could not create the voice channel" | The bot lacks **Manage Channels**, or the server hit its 500-channel cap |
 | Names stop updating | Discord rename rate limit — raise `UPDATE_INTERVAL_MINUTES` |
-| "Token not found on Alcor" | Wrong symbol/contract, or no TOKEN/WAX pool exists for it |
+| "No price for …" | Wrong symbol/contract, or wrong type — try `pool` instead of `standard` or the reverse |
+| "N pools quote …" | Several AMM pools match: run `add` again with the `pool_id` shown |
+| Price differs a lot from Alcor | The token is probably tracked on the wrong market (order book vs swap), or on another pool — check with `/crypto-tracker list` |
 | `fetch is not defined` | Node.js older than 18 — upgrade |
 | A channel was deleted by hand | The entry drops itself automatically at the next refresh |
 
@@ -163,15 +200,25 @@ src/config.js             .env parsing, defaults, safety clamps
 src/registerCommands.js   command loading + slash registration
 src/commands/             /crypto-tracker (add, remove, list, refresh)
 src/cryptoTracker.js      update loop, channel naming, JSON persistence
-src/priceSources.js       CoinGecko (WAX/USD) + Alcor pool reserves
+src/priceSources.js       CoinGecko (WAX/USD) + Alcor order book + Alcor AMM pools
 src/waxRpc.js             WAX RPC calls with endpoint failover
 src/i18n.js               EN / FR strings
 ```
 
-Each refresh cycle fetches WAX/USD once and pages the Alcor `pools` table once,
-then renames the channels whose price changed, spaced out to stay within
-Discord's rate limits. A token's price in WAX is taken from the **deepest**
-TOKEN/WAX pool, so a near-empty duplicate pool cannot skew the display.
+Each refresh cycle fetches WAX/USD once, pages the Alcor `pools` and `markets`
+tables once (only if a tracked token needs them), then renames the channels
+whose price changed, spaced out to stay within Discord's rate limits. If
+CoinGecko is down, pools quoted outside WAX still refresh.
+
+Run the unit tests (pricing maths, no network) with `npm test`.
+
+### Upgrading from 1.0
+
+- `standard` now reads the **order book**. A `standard` token that only trades
+  on the Alcor swap will stop refreshing (a warning is logged): remove it and add
+  it back with `type:pool`.
+- Existing `pool` entries keep working on the deepest TOKEN/WAX pool; re-add them
+  to pin a specific pool.
 
 State lives in a single JSON file, so a restart picks up exactly where it left
 off; back up `data/tracked-channels.json` if you care about the trend arrows.
